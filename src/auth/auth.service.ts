@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger, RequestTimeoutException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ClientProxy } from '@nestjs/microservices';
-import { compareSync } from 'bcrypt';
-import { throwError, TimeoutError } from 'rxjs';
+import { compareSync } from 'bcryptjs';
+import { catchError, throwError, timeout, TimeoutError } from 'rxjs';
 
 @Injectable()
 export class AuthService {
@@ -14,38 +14,35 @@ export class AuthService {
 
     async valdateUser(email: string, password: string): Promise<any> {
         try{
-            const user = await this.client.send({
-                    role: 'user',
-                    cmd: 'get'
-                },
-                {email}
-            ).pipe(
-                timeout(5000),
-                catchError(err => {
-                    if(err instanceof TimeoutError){
-                        return throwError(new RequestTimeoutException);
-                    }
-                }),
-            ).toPromise();
+            const user = await this.client.send({role: 'user', cmd: 'get'},{email}
+                    ).pipe(
+                        timeout(5000),
+                        catchError(err => {
+                            if(err instanceof TimeoutError){
+                                return throwError(new RequestTimeoutException());
+                            }
+                            return throwError(err);
+                        }),
+                    ).toPromise();
 
-            if(compareSync(password, email?.password)){
-                return email;
+            if(compareSync(password, user?.password)){
+                return user;
             }
 
-        }   catch(e) {
-            Logger.log(e);
-            throw e;
+        } catch(e) {
+          Logger.log(e);
+          throw e;
         }
         
             
     }
 
-    async login(email) {
-        const payload = { email, sub: email.id};
+    async login(user) {
+        const payload = { user, sub: user.id};
     
         return {
-          userId: email.id,
+          userId: user.id,
           accessToken: this.jwtService.sign(payload)
         };
-      }
+    }
 }
